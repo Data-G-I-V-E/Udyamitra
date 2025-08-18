@@ -29,11 +29,36 @@
   },
   "EligibilityChecker": {
     "tool_name": "EligibilityChecker",
-    "intents": ["check_eligibility", "eligible", "am_i_eligible", "can_apply"],
+    "intents": [
+      "check_eligibility",
+      "eligible",
+      "am_i_eligible",
+      "can_apply"
+    ],
     "endpoint": "http://127.0.0.1:10000/check-eligibility/mcp/",
     "input_schema": "EligibilityCheckRequest",
     "output_schema": "EligibilityCheckResponse",
     "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
     "description": "Checks if a user is eligible for a given scheme based on their profile"
+  },
+  "InsightGenerator": {
+    "tool_name": "InsightGenerator",
+    "intents": [
+      "explain",
+      "how to ensure",
+      "measures",
+      "investments",
+      "investor",
+      "government investment",
+      "insights",
+      "generate_insight",
+      "generate_insights",
+      "generate_investor_insight"
+    ],
+    "endpoint": "http://127.0.0.1:10000/generate-insight/mcp/",
+    "input_schema": "InsightGeneratorInput",
+    "output_schema": "InsightGeneratorOutput",
+    "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "description": "Generate insights for the investors"
   }
 }

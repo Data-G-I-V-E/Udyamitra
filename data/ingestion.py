@@ -11,9 +11,9 @@ from langchain_core.documents import Document
 
 load_dotenv()
 
-PDF_DIR = "data/raw/pdfs"
-TXT_DIR = "data/raw/webpages"
-COLLECTION_NAME = "Scheme_chunks"
+PDF_DIR = "data/Policy"
+#TXT_DIR = "data/raw/webpages"
+COLLECTION_NAME = "Investor_policies"
 
 # Embedding model (LangChain wrapper)
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -68,10 +68,10 @@ def ingest_all():
                 pdf_path = os.path.join(root, fname)
                 groups.setdefault(key, {}).setdefault("pdfs", []).append(pdf_path)
 
-    for fname in os.listdir(TXT_DIR):
-        if fname.endswith(".txt"):
-            key = os.path.splitext(fname)[0]
-            groups.setdefault(key, {})["txt"] = os.path.join(TXT_DIR, fname)
+    #for fname in os.listdir(TXT_DIR):
+        #if fname.endswith(".txt"):
+            #key = os.path.splitext(fname)[0]
+            #groups.setdefault(key, {})["txt"] = os.path.join(TXT_DIR, fname)
 
     for doc_id, files in groups.items():
         logger.info(f"\nProcessing document group: {doc_id}")

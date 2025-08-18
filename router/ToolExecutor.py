@@ -201,6 +201,7 @@ class ToolExecutor:
 
                     logger.info(f"Calling tool '{task.tool_name}' with input: {full_input}")
                     wrapped_input = {"schema_dict": full_input.model_dump()}
+                    logger.info(f"Wrapped input for tool '{task.tool_name}': {wrapped_input}")
                     response = await session.call_tool(required_inputs["server_Tool"], wrapped_input)
 
                     parsed = {}

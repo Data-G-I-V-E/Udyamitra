@@ -10,6 +10,9 @@ from utility.LLM import LLMClient
 from sentence_transformers.cross_encoder import CrossEncoder
 from typing import List, Dict
 
+# Import the Pydantic models for input and output
+from utility.model import InsightGeneratorInput, InsightGeneratorOutput, RetrievedDoc
+
 class InsightGenerator:
     JSON_FORMAT_INSTRUCTIONS = """
     {
@@ -66,17 +69,8 @@ class InsightGenerator:
             
         return sorted(documents, key=lambda x: x['rerank_score'], reverse=True)
 
-    def generate_insight(self, user_query: str, user_profile: dict, retrieved_documents: List[Dict] = None):
+    def generate_insight(self, user_query: str, user_profile: dict, retrieved_documents: str = None) -> dict:
         try:
-            # Rerank the retrieved documents before using them
-            if retrieved_documents:
-                logger.info(f"Reranking {len(retrieved_documents)} documents for query: '{user_query}'")
-                reranked_docs = self._rerank_documents(user_query, retrieved_documents)
-                # Create the final context string from the reranked list
-                context_string = "\n\n".join([doc.get('content', '') for doc in reranked_docs])
-            else:
-                context_string = None
-
             system_prompt = """
             You are 'InsightBot', an expert financial analyst AI assistant. Your purpose is to provide clear, data-driven, and personalized investment insights to investors.
 
@@ -95,15 +89,18 @@ class InsightGenerator:
             === USER PROFILE ===
             {json.dumps(user_profile, indent=2)}
 
-            === RETRIEVED DOCUMENTS (Primary Source of Truth, reranked for relevance) ===
-            {context_string if context_string else "No documents provided."}
+            === RETRIEVED DOCUMENTS (Primary Source of Truth) ===
+            {retrieved_documents if retrieved_documents else "No documents provided."}
 
             === REQUIRED JSON OUTPUT FORMAT ===
             {self.JSON_FORMAT_INSTRUCTIONS}
             """
 
-            response = self.llm_client.run_json(system_prompt, user_prompt)
-            return response
+            response_dict = self.llm_client.run_json(system_prompt, user_prompt)
+            
+            # Validate and return as a dictionary
+            validated_output = InsightGeneratorOutput(**response_dict)
+            return validated_output.model_dump()
         
         except Exception as e:
             logger.error(f"InsightGenerator failed: {e}")

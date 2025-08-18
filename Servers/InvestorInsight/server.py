@@ -5,55 +5,58 @@ from Logging.logger import logger
 from Exception.exception import UdayamitraException
 from utility.register_tools import generate_tool_registry_entry, register_tool
 from fastmcp import Client
-from typing import Optional
+from typing import List, Optional
 from dotenv import load_dotenv
+from utility.model import UserProfile, RetrievedDoc, InsightGeneratorInput, InsightGeneratorOutput
 
 load_dotenv()
 
-mcp = FastMCP("InsightGenerator", stateless_http = True)
-RETRIEVER_URL = "http://127.0.0.1:10000/retrieve-docs/mcp"
+mcp = FastMCP("InsightGenerator", stateless_http=True)
+RETRIEVER_URL = "http://127.0.0.1:10000/retrieve-scheme/mcp"
 RETRIEVER_TOOL_NAME = "retrieve_documents"
 
 @mcp.tool()
-async def generate_insight(query: dict, documents: Optional[str] = None):
+async def generate_insight(schema_dict: dict, documents: Optional[str] = None) -> dict:
     try:
-        logger.info("Received request to generate insights")
+        logger.info(f"[InsightGenerator] Received request: {schema_dict}")
         insight_generator = InsightGenerator()
 
-        logger.info(f"[Explainer] Querying retriever with: '{query}', with type: {type(query)}")
-        logger.debug(f"[Explainer] Calling retriever with query: '{query}' | Collection: 'chunks'")
+        # Reshape the input dictionary into the required Pydantic model for the user profile
+        user_profile_obj = UserProfile(**schema_dict.get("user_profile", {}))
 
+        query_text = schema_dict.get("user_query", "")
+        logger.info(f"Querying retriever with: '{query_text}'")
+        
         async with Client(RETRIEVER_URL) as retriever_client:
             response = await retriever_client.call_tool(
                 RETRIEVER_TOOL_NAME,
                 {
-                    "query": query["query"],
-                    "collection_type": "chunks",  
+                    "query": query_text,
+                    "caller_tool": mcp.name,
                     "top_k": 5
                 }
             )
 
-        logger.debug(f"[Explainer] Raw retriever response: {response}")
-        logger.warning(f"[Explainer] response.data → {response.data} (type={type(response.data)})")
-
-        docs = response.data.result
-        if not isinstance(docs, list):
-            logger.warning("[Explainer] Retrieved documents were not a list; resetting to []")
-            docs = []
+        docs_from_retriever = response.data.result
+        if not isinstance(docs_from_retriever, list):
+            logger.warning("Retrieved documents were not a list; resetting to []")
+            docs_from_retriever = []
         
-        for d in docs:
-            logger.debug(f"[Explainer] Raw doc object: {d} | type={type(d)} | keys={vars(d).keys()}")
+        # --- Applying the exact logic from your reference code ---
+        logger.info(f"[InsightGenerator] Retrieved {len(docs_from_retriever)} documents.")
 
-        logger.info(f"[Explainer] Retrieved {len(docs)} documents")
-
-        doc_dicts = [vars(d) for d in docs]
+        doc_dicts = [vars(d) for d in docs_from_retriever]
         combined_content = "\n\n".join(doc.get("content", "") for doc in doc_dicts)
-        logger.info(f"[Explainer] Combined content length: {len(combined_content)}")
+        logger.info(f"[InsightGenerator] Combined content length: {len(combined_content)}")
+        # --- End of reference logic ---
 
+        # Call the core logic with the reshaped data, matching the reference pattern
         result = insight_generator.generate_insight(
-            query,
+            user_query=query_text,
+            user_profile=user_profile_obj.model_dump(), # Pass as dict, like in SchemeExplainer
             retrieved_documents=combined_content or None
         )
+        
         return result
 
     except Exception as e:

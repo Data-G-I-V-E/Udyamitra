@@ -40,7 +40,7 @@ async def explain_scheme(schema_dict: dict, documents: Optional[str] = None) -> 
                 RETRIEVER_TOOL_NAME,
                 {
                     "query": query["query"],
-                    "collection_type": "chunks",  
+                    "caller_tool": mcp.name,  
                     "top_k": 5
                 }
             )

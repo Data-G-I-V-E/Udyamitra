@@ -102,3 +102,29 @@ class ConversationState(BaseModel):
 
     # Dynamic state
     missing_inputs: Dict[str, List[str]] = {}  # tool_name -> list of missing fields
+
+class InsightGeneratorInput(BaseModel):
+    user_query: str = Field(..., description="The original, verbatim query from the user.")
+    user_profile: UserProfile = Field(..., description="The user's profile, including location and type.")
+    retrieved_documents: List[RetrievedDoc] = Field(..., description="The list of documents retrieved from the vector database, ranked by similarity.")
+
+class InsightGeneratorOutput(BaseModel):
+    insight_summary: str = Field(..., description="A concise, one-sentence summary of the key insight.")
+    # detailed_explanation: str = Field(..., description="A detailed but easy-to-understand explanation of the insight.")
+    # potential_benefits: List[str] = Field(..., description="A list of potential benefits or upsides of acting on this insight.")
+    # associated_risks: List[str] = Field(..., description="A list of key risks or downsides the user must consider.")
+    # actionable_steps: List[str] = Field(..., description="A list of concrete, practical steps the user can take next.")
+    # sources: List[str] = Field(..., description="List of the specific document titles or identifiers used for the analysis.")
+
+class InsightGeneratorInput(BaseModel):
+    user_query: str = Field(..., description="The original, verbatim query from the user.")
+    user_profile: UserProfile = Field(..., description="The user's profile, including location and type.")
+    retrieved_documents: List[RetrievedDoc] = Field(..., description="The list of documents retrieved from the vector database, ranked by similarity.")
+
+class InsightGeneratorOutput(BaseModel):
+    insight_summary: str = Field(..., description="A concise, one-sentence summary of the key insight.")
+    detailed_explanation: str = Field(..., description="A detailed but easy-to-understand explanation of the insight.")
+    potential_benefits: List[str] = Field(..., description="A list of potential benefits or upsides of acting on this insight.")
+    associated_risks: List[str] = Field(..., description="A list of key risks or downsides the user must consider.")
+    actionable_steps: List[str] = Field(..., description="A list of concrete, practical steps the user can take next.")
+    sources: List[str] = Field(..., description="List of the specific document titles or identifiers used for the analysis.")
