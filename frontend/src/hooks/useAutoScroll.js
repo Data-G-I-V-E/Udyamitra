@@ -1,61 +1,65 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 const SCROLL_THRESHOLD = 10;
 
 function useAutoScroll(active) {
-  const scrollContentRef = useRef(null);
-  const isDisabled = useRef(false);
-  const prevScrollTop = useRef(null);
+    const scrollContentRef = useRef(null);
+    const isDisabled = useRef(false);
+    const prevScrollTop = useRef(null);
 
-  useEffect(() => {
-    const resizeObserver = new ResizeObserver(() => {
-      const { scrollHeight, clientHeight, scrollTop } = document.documentElement;
-      if (!isDisabled.current && scrollHeight - clientHeight > scrollTop) {
-        document.documentElement.scrollTo({
-          top: scrollHeight - clientHeight,
-          behavior: 'smooth'
+    useEffect(() => {
+        const el = scrollContentRef.current;
+        if (!el) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+        const { scrollHeight, clientHeight, scrollTop } = el;
+        if (!isDisabled.current && scrollHeight - clientHeight > scrollTop) {
+            el.scrollTo({
+            top: scrollHeight - clientHeight,
+            behavior: "smooth",
+            });
+        }
         });
-      }
-    });
 
-    if (scrollContentRef.current) {
-      resizeObserver.observe(scrollContentRef.current);
-    }
-    
-    return () => resizeObserver.disconnect();
-  }, []);
+        resizeObserver.observe(el);
+        return () => resizeObserver.disconnect();
+    }, []);
 
-  useLayoutEffect(() => {
-    if (!active) {
-      isDisabled.current = true;
-      return;
-    }
+    useLayoutEffect(() => {
+        const el = scrollContentRef.current;
+        if (!el) return;
 
-    function onScroll() {
-      const { scrollHeight, clientHeight, scrollTop } = document.documentElement;
-      if (
-        !isDisabled.current &&
-        window.scrollY < prevScrollTop.current &&
-        scrollHeight - clientHeight > scrollTop + SCROLL_THRESHOLD
-      ) {
+        if (!active) {
         isDisabled.current = true;
-      } else if (
-        isDisabled.current &&
-        scrollHeight - clientHeight <= scrollTop + SCROLL_THRESHOLD
-      ) {
+        return;
+        }
+
+        function onScroll() {
+        const { scrollHeight, clientHeight, scrollTop } = el;
+
+        if (
+            !isDisabled.current &&
+            scrollTop < prevScrollTop.current &&
+            scrollHeight - clientHeight > scrollTop + SCROLL_THRESHOLD
+        ) {
+            isDisabled.current = true;
+        } else if (
+            isDisabled.current &&
+            scrollHeight - clientHeight <= scrollTop + SCROLL_THRESHOLD
+        ) {
+            isDisabled.current = false;
+        }
+        prevScrollTop.current = scrollTop;
+        }
+
         isDisabled.current = false;
-      }
-      prevScrollTop.current = window.scrollY;
-    }
-    
-    isDisabled.current = false;
-    prevScrollTop.current = document.documentElement.scrollTop;
-    window.addEventListener('scroll', onScroll);
+        prevScrollTop.current = el.scrollTop;
+        el.addEventListener("scroll", onScroll);
 
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [active]);
+        return () => el.removeEventListener("scroll", onScroll);
+    }, [active]);
 
-  return scrollContentRef;
+    return scrollContentRef;
 }
 
 export default useAutoScroll;

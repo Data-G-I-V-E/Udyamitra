@@ -30,7 +30,7 @@ async def check_eligibility(schema_dict: dict) -> dict:
         async with Client(RETRIEVER_URL) as retriever_client:
             response = await retriever_client.call_tool(
                 RETRIEVER_TOOL_NAME,
-                {"query": query, "collection_type": "chunks", "top_k": 5}
+                {"query": query, "caller_tool": mcp.name, "top_k": 5}
             )
 
         logger.debug(f"[EligibilityChecker] Retriever response: {response}")

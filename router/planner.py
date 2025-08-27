@@ -32,45 +32,57 @@ class Planner:
                 last_entities = state.context_entities or {}
 
                 context_hint = f"""
-Conversation History:
+## Conversation History (for context):
 - Previous tool used: {last_tool}
 - Last assistant message: {last_msg}
 - Previously detected entities: {json.dumps(last_entities, indent=2)}
-Use this context if the current query is ambiguous or a follow-up.
+Use this context ONLY if the current query is an ambiguous follow-up.
 """.strip()
 
+            # UPDATED: A more restrictive system prompt.
+            system_prompt = """
+You are a precise and logical planning assistant. Your ONLY job is to create a JSON execution plan based on the user's query metadata.
+You MUST follow these rules:
+1.  You MUST ONLY use the tool names provided in the `tools_required` list from the input metadata.
+2.  Do NOT invent, create, or hallucinate any tool names.
+3.  If the `tools_required` list is empty, you MUST return a plan with an empty `tasks` list.
+4.  Your entire response MUST be a single, valid JSON object and nothing else.
+""".strip()
+
+            # UPDATED: A clearer user prompt with explicit instructions.
             user_prompt = f"""
-Given the following metadata:
+## INSTRUCTIONS
+Create a JSON execution plan based on the provided metadata. Adhere strictly to the rules given by the system prompt.
+The `input` for each tool should be constructed from the `query`, `entities`, and `user_profile` in the metadata.
+
+## METADATA
 {metadata.model_dump_json(indent=2)}
 
 {context_hint}
 
-Generate an execution plan that includes:
-- The type of execution (sequential or parallel)
-- The list of tasks that need to be executed in this JSON format:
-
+## REQUIRED JSON OUTPUT FORMAT
 {{
   "execution_type": "sequential",
   "tasks": [
     {{
-      "tool": "ToolName",
+      "tool": "ToolNameFromToolsRequiredList",
       "input": {{ ... }},
       "input_from": "OptionalPreviousTool"
     }}
   ]
 }}
-
-Only return a valid JSON object, no explanation.
-Make sure all keys are enclosed in double quotes and properly comma-separated.
 """.strip()
-
-            system_prompt = "You are a planning assistant for an AI agent that routes user queries to tools."
 
             raw_output = self.llm_client.run_chat(system_prompt, user_prompt)
             logger.info(f"Raw output from LLM:\n{raw_output}")
 
-            # using safe_json_parse to handle invalid JSON
             plan_dict = safe_json_parse(raw_output)
+            
+            # Handle the case where the LLM correctly returns an empty task list
+            tasks_data = plan_dict.get("tasks", [])
+            if not tasks_data:
+                logger.warning("Planner returned a plan with no tasks.")
+                return ExecutionPlan(execution_type="sequential", task_list=[])
 
             logger.info(f"Parsed execution plan:\n{json.dumps(plan_dict, indent=2)}")
 
@@ -80,7 +92,7 @@ Make sure all keys are enclosed in double quotes and properly comma-separated.
                     input=task["input"],
                     input_from=task.get("input_from")
                 )
-                for task in plan_dict["tasks"]
+                for task in tasks_data
             ]
 
             return ExecutionPlan(

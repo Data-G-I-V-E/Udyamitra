@@ -45,7 +45,8 @@ logger.info("Retriever vector stores ready.")
 
 COLLECTION_MAP = {
     "InsightGenerator": "Investor_policies",
-    "SchemeExplainer": "Scheme_chunks"
+    "SchemeExplainer": "Scheme_chunks",
+    "EligibilityChecker": "Scheme_chunks"
 }
 
 mcp = FastMCP("SchemeDB", stateless_http=True)
@@ -55,10 +56,12 @@ async def retrieve_documents(query: str, caller_tool: str, top_k: int = 5) -> Re
     logger.info(f"[Retriever] Query received from '{caller_tool}' → query: '{query}' | top_k: {top_k}")
     
     collection_name = COLLECTION_MAP.get(caller_tool)
+    logger.info(f"[Retriever] Collection mapped for '{caller_tool}': {collection_name}")
     if not collection_name:
         raise UdayamitraException(f"Invalid caller_tool: '{caller_tool}'. No collection mapping found.", sys)
 
     store = vector_stores.get(collection_name)
+    logger.info(f"[Retriever] Using vector store for collection '{collection_name}': {store}")
     if not store:
         raise UdayamitraException(f"Server error: No vector store configured for collection '{collection_name}'", sys)
 
@@ -67,10 +70,13 @@ async def retrieve_documents(query: str, caller_tool: str, top_k: int = 5) -> Re
         logger.info(f"[Retriever] Found {len(docs)} matching docs from '{collection_name}'.")
         for i, doc in enumerate(docs):
             logger.debug(f"[Retriever] Doc {i+1}: {doc.page_content[:120]!r} | Metadata: {doc.metadata}")
+        
+        logger.info(f"[Retriever] Successfully retrieved {len(docs)} documents for query: '{query}'")
             
         return RetrieverOutput(result=[
             RetrievedDoc(content=d.page_content, metadata=d.metadata) for d in docs
         ])
+    
     except Exception as e:
         logger.error(f"[Retriever] Error fetching docs: {e}", exc_info=True)
         raise UdayamitraException("Failed to retrieve documents", sys)

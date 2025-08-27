@@ -11,7 +11,7 @@ from langchain_core.documents import Document
 
 load_dotenv()
 
-PDF_DIR = "data/Policy"
+PDF_DIR = "data/Policy/New"
 #TXT_DIR = "data/raw/webpages"
 COLLECTION_NAME = "Investor_policies"
 
