@@ -3,9 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import json
+import sys # <-- ADDED
 from .pipeline import Pipeline
 from utility.model import ConversationState, Message
 from utility.StateManager import StateManager
+from Logging.logger import logger # <-- ADDED
+from Exception.exception import UdayamitraException # <-- ADDED
+
 import nest_asyncio
 nest_asyncio.apply()
 
@@ -36,6 +40,7 @@ async def root():
     return {"message": "Pipeline API for backend is running."}
 
 # POST /start (starts a new conversation)
+# --- MODIFIED: Added try...except block ---
 @app.post("/start")
 async def start_pipeline(request: StartRequest):
     global conversation_state, state_manager
@@ -45,58 +50,100 @@ async def start_pipeline(request: StartRequest):
     state_manager = StateManager(initial_state=conversation_state)
     state_manager.add_message(role="user", content=request.user_query)
 
-    pipeline = Pipeline(request.user_query, state=state_manager.get_state())
-    output = await pipeline.run()
+    try:
+        pipeline = Pipeline(request.user_query, state=state_manager.get_state())
+        output = await pipeline.run()
+        
+        # This handles the "no tools found" case where the pipeline
+        # runs but doesn't produce any tool results (empty dictionary)
+        if not output or "results" not in output or not output["results"]:
+             logger.warning(f"Pipeline ran but returned no results (no tools found) for query: {request.user_query}")
+             # We raise an exception to be caught by the 'except' block
+             raise UdayamitraException("No tools were found or no plan could be executed for this query.", sys)
+
+        assistant_response = _extract_response_from_results(output)
+        stage = pipeline.stage.name
+        results = output["results"]
+
+    except Exception as e:
+        # This catches any failure in the pipeline (crash, no tools, etc.)
+        logger.error(f"Pipeline failed for query '{request.user_query}': {e}", exc_info=True)
+        # This is your requested graceful message
+        assistant_response = "I'm sorry, I'm not able to help with that request. Please try a different query."
+        stage = "FAILED"
+        results = None
+        # The server doesn't crash; it just returns this error message
     
-    assistant_response = _extract_response_from_results(output)
     state_manager.add_message(role="assistant", content=assistant_response)
 
     return {
         "message": assistant_response,
-        "stage": pipeline.stage.name,
-        "results": output["results"] if output else None,
+        "stage": stage,
+        "results": results,
         "state": state_manager.get_state().model_dump()
     }
 
 # POST /continue (adds a follow-up turn)
+# --- MODIFIED: Added try...except block ---
 @app.post("/continue")
 async def continue_pipeline(request: ContinueRequest):
     global conversation_state, state_manager
 
     state_manager.add_message(role="user", content=request.user_query)
 
-    pipeline = Pipeline(request.user_query, state=state_manager.get_state())
-    output = await pipeline.run()
+    try:
+        pipeline = Pipeline(request.user_query, state=state_manager.get_state())
+        output = await pipeline.run()
 
-    assistant_response = _extract_response_from_results(output)
+        # This handles the "no tools found" case
+        if not output or "results" not in output or not output["results"]:
+             logger.warning(f"Pipeline ran but returned no results (no tools found) for query: {request.user_query}")
+             raise UdayamitraException("No tools were found or no plan could be executed for this query.", sys)
+
+        assistant_response = _extract_response_from_results(output)
+        stage = pipeline.stage.name
+        results = output["results"]
+
+    except Exception as e:
+        # This catches any failure in the pipeline
+        logger.error(f"Pipeline failed for query '{request.user_query}': {e}", exc_info=True)
+        # This is your requested graceful message
+        assistant_response = "I'm sorry, I'm not able to help with that request. Please try a different query."
+        stage = "FAILED"
+        results = None
+    
     state_manager.add_message(role="assistant", content=assistant_response)
 
     return {
         "message": assistant_response,
-        "stage": pipeline.stage.name,
-        "results": output["results"] if output else None,  # <-- fixed key
+        "stage": stage,
+        "results": results,
         "state": state_manager.get_state().model_dump()
     }
+
 # Helper function to extract assistant response from tool results
 def _extract_response_from_results(output: dict) -> str:
-    if output and "results" in output:
-        results = output["results"]
+    # This check is now redundant because of our new error handling,
+    # but it's good to keep as a final fallback.
+    if not output or "results" not in output or not output["results"]:
+        return "I'm sorry, I couldn't generate a response."
 
-        # Fix: decode if results is JSON string
-        if isinstance(results, str):
-            try:
-                results = json.loads(results)
-            except json.JSONDecodeError:
-                return "Invalid results format."
+    results = output["results"]
 
-        messages = []
-        for tool_name, result in results.items():
-            # result could be string or dict with output_text
-            explanation = result.get("output_text") if isinstance(result, dict) else str(result)
-            messages.append(f"### Tool used: {tool_name}\n\n{explanation}")
-        return "\n\n".join(messages)
+    # Fix: decode if results is JSON string
+    if isinstance(results, str):
+        try:
+            results = json.loads(results)
+        except json.JSONDecodeError:
+            return "Invalid results format."
 
-    return "I'm sorry, I couldn't generate a response."
+    messages = []
+    for tool_name, result in results.items():
+        # result could be string or dict with output_text
+        explanation = result.get("output_text") if isinstance(result, dict) else str(result)
+        messages.append(f"{explanation}") # Removed the "Tool used:" part for a cleaner response
+    
+    return "\n\n".join(messages)
 
 # GET /status
 @app.get("/status")
@@ -108,14 +155,21 @@ async def get_status():
     if last_tool and last_tool in state.tool_memory:
         tool_data = state.tool_memory[last_tool].data
         if tool_data:
+            # Try to get the *last assistant message* as the output_text
+            last_assistant_message = ""
+            for msg in reversed(state.messages):
+                if msg.role == "assistant":
+                    last_assistant_message = msg.content
+                    break
+            
             results[last_tool] = {
-                "output_text": state.messages[-2].content if len(state.messages) >= 2 else "No explanation available.",
+                "output_text": last_assistant_message,
                 "raw_output": tool_data
             }
 
     return {
         "message": "Active pipeline status",
-        "stage": "COMPLETED" if results else "IN_PROGRESS",  # You can improve this logic if needed
+        "stage": "COMPLETED" if state.messages and state.messages[-1].role == "assistant" else "IN_PROGRESS",
         "results": results if results else None,
         "state": state.model_dump()
     }
