@@ -42,6 +42,7 @@ async def root():
     return {"message": "Pipeline API for backend is running."}
 
 # POST /start (starts a new conversation)
+# --- MODIFIED: Added try...except block ---
 @app.post("/start")
 async def start_pipeline(request: StartRequest):
     global conversation_state, state_manager
@@ -84,6 +85,7 @@ async def start_pipeline(request: StartRequest):
     }
 
 # POST /continue (adds a follow-up turn)
+# --- MODIFIED: Added try...except block ---
 @app.post("/continue")
 async def continue_pipeline(request: ContinueRequest):
     global conversation_state, state_manager
