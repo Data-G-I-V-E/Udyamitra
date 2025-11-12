@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import json
-import sys # <-- ADDED
+import sys 
 from .pipeline import Pipeline
 from utility.model import ConversationState, Message
 from utility.StateManager import StateManager
-from Logging.logger import logger # <-- ADDED
-from Exception.exception import UdayamitraException # <-- ADDED
+from Logging.logger import logger 
+from Exception.exception import UdayamitraException 
 
 import nest_asyncio
 nest_asyncio.apply()
@@ -23,6 +23,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+ERROR_MESSAGE = "I'm sorry, I'm not able to help with that request. Please try a different query."
 
 # Global conversation state
 conversation_state = ConversationState()
@@ -68,8 +70,7 @@ async def start_pipeline(request: StartRequest):
     except Exception as e:
         # This catches any failure in the pipeline (crash, no tools, etc.)
         logger.error(f"Pipeline failed for query '{request.user_query}': {e}", exc_info=True)
-        # This is your requested graceful message
-        assistant_response = "I'm sorry, I'm not able to help with that request. Please try a different query."
+        assistant_response = ERROR_MESSAGE
         stage = "FAILED"
         results = None
         # The server doesn't crash; it just returns this error message
@@ -107,8 +108,7 @@ async def continue_pipeline(request: ContinueRequest):
     except Exception as e:
         # This catches any failure in the pipeline
         logger.error(f"Pipeline failed for query '{request.user_query}': {e}", exc_info=True)
-        # This is your requested graceful message
-        assistant_response = "I'm sorry, I'm not able to help with that request. Please try a different query."
+        assistant_response = ERROR_MESSAGE
         stage = "FAILED"
         results = None
     
@@ -126,7 +126,7 @@ def _extract_response_from_results(output: dict) -> str:
     # This check is now redundant because of our new error handling,
     # but it's good to keep as a final fallback.
     if not output or "results" not in output or not output["results"]:
-        return "I'm sorry, I couldn't generate a response."
+        return ERROR_MESSAGE
 
     results = output["results"]
 
@@ -167,9 +167,19 @@ async def get_status():
                 "raw_output": tool_data
             }
 
+    stage = "IN_PROGRESS" # Default
+    if state.messages:
+        last_message = state.messages[-1]
+        if last_message.role == "assistant":
+            if last_message.content == ERROR_MESSAGE:
+                stage = "FAILED" # The last query failed
+            else:
+                stage = "COMPLETED" # The last query succeeded
+    # If the last message is 'user', stage remains 'IN_PROGRESS'
+
     return {
         "message": "Active pipeline status",
-        "stage": "COMPLETED" if state.messages and state.messages[-1].role == "assistant" else "IN_PROGRESS",
+        "stage": stage, 
         "results": results if results else None,
         "state": state.model_dump()
     }
