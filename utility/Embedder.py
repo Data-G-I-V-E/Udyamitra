@@ -1,5 +1,5 @@
-import httpx
 import os
+import httpx
 import asyncio
 
 EMBEDDING_API_URL = os.getenv(
@@ -12,11 +12,29 @@ async def get_embedding(text: str):
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(EMBEDDING_API_URL, json={"text": text})
         resp.raise_for_status()
-        return resp.json()["embedding"]
+        data = resp.json()
+        return data.get("embedding") or data
+
+
+def run_async(coro):
+    """Safely run async functions in sync contexts."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        result = new_loop.run_until_complete(coro)
+        new_loop.close()
+        return result
+    else:
+        return asyncio.run(coro)
 
 
 class HFAPIEmbeddings:
-    """Wrapper for Hugging Face API to mimic LangChain embeddings interface."""
+    """Wrapper for Hugging Face embedding API."""
 
     async def embed_documents(self, texts):
         embeddings = []
@@ -26,30 +44,9 @@ class HFAPIEmbeddings:
         return embeddings
 
     def embed_documents_sync(self, texts):
-        """Synchronous wrapper for scripts that are not async."""
-        return asyncio.run(self.embed_documents(texts))
-
-class RemoteHFEmbeddings:
-    """Wrapper that hits a remote embedding API endpoint (e.g., Hugging Face Space)."""
-
-    def __init__(self, api_url: str = EMBEDDING_API_URL):
-        self.api_url = api_url
-
-    async def embed_documents(self, texts):
-        """Asynchronous method for generating multiple embeddings."""
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            tasks = [client.post(self.api_url, json={"text": t}) for t in texts]
-            responses = await asyncio.gather(*tasks)
-            embeddings = []
-            for resp in responses:
-                if resp.status_code == 200:
-                    embeddings.append(resp.json()["embedding"])
-            return embeddings
-
-    def embed_documents_sync(self, texts):
-        """Synchronous wrapper for non-async contexts."""
-        return asyncio.run(self.embed_documents(texts))
+        """Sync wrapper for embedding multiple texts."""
+        return run_async(self.embed_documents(texts))
 
     def embed_query(self, text):
-        """Sync single-text embedding for compatibility with LangChain."""
-        return asyncio.run(self.embed_documents([text]))[0]
+        """Sync single-text embedding for AstraDBVectorStore."""
+        return run_async(get_embedding(text))
