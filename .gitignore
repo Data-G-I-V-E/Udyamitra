@@ -208,6 +208,7 @@ __marimo__/
 
 #Data
 data/Policy/
+data/raw/pdfs/
 output/
 output.json
 pipeline_log.txt
